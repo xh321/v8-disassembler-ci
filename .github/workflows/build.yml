@@ -1,0 +1,54 @@
+name: Build V8
+
+on:
+  workflow_dispatch:
+    inputs:
+      v8_branch:
+        description: 'V8 Version / Branch'
+        required: true
+        default: '13.2.152.27'
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      V8_BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.v8_branch || '13.2.152.27' }}
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install depot_tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
+          echo "C:\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build V8
+        id: build
+        run: |
+          fetch v8
+          cd v8
+          git checkout $env:V8_BRANCH
+          gclient sync -v
+          python3 tools\dev\v8gen.py x64.release -vv -- is_component_build=true v8_static_library=false
+          ninja -C out.gn\x64.release
+
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "artifact=v8-$env:V8_BRANCH"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.artifact }}
+          path: v8/out.gn/x64.release
