@@ -35,20 +35,56 @@ jobs:
           git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git C:\depot_tools
           echo "C:\depot_tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build V8
-        id: build
+      - name: Fetch V8
         run: |
           fetch v8
           cd v8
           git checkout $env:V8_BRANCH
           gclient sync -v
-          python3 tools\dev\v8gen.py x64.release -vv -- is_component_build=true v8_static_library=false
-          ninja -C out.gn\x64.release
 
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "artifact=v8-$env:V8_BRANCH"
+      - name: Patch V8
+        run: |
+          cd v8
+          # placeholder
+
+      - name: Build D8
+        id: build
+        run: |
+          cd v8
+          $release = "out.gn\x64.release"
+          New-Item -ItemType Directory -Path $release -Force
+          Set-Content -Path "$release\args.gn" -Value @"
+          dcheck_always_on = false
+          is_component_build = false
+          is_debug = false
+          target_cpu = "x64"
+          use_custom_libcxx = false
+          v8_monolithic = true
+          v8_use_external_startup_data = false
+          
+          v8_static_library = true
+          v8_enable_disassembler = true
+          v8_enable_object_print = true
+          v8_enable_pointer_compression = false
+          
+          treat_warnings_as_errors = false
+          "@
+          gn gen $release
+          ninja -C $release d8
+
+          $artifact = "d8-$env:V8_BRANCH"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "artifact=$artifact"
+
+      - name: Cleanup Artifact
+        run: |
+          cd v8\out.gn\x64.release
+          Get-ChildItem
+          Remove-Item -Path gen -Recurse -Force
+          Remove-Item -Path obj -Recurse -Force
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.build.outputs.artifact }}
           path: v8/out.gn/x64.release
+          compression-level: 9
