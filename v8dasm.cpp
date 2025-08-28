@@ -7,7 +7,7 @@
 
 #pragma comment(lib, "v8_libbase.lib")
 #pragma comment(lib, "v8_libplatform.lib")
-#pragma comment(lib, "wee8.lib")
+#pragma comment(lib, "v8_monolith.lib")
 
 #pragma comment(lib, "secur32.lib")
 #pragma comment(lib, "winmm.lib")

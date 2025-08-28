@@ -92,32 +92,75 @@ jobs:
           treat_warnings_as_errors = false
           "@
           gn gen $release
+          
+          # Build V8 libraries step by step to ensure they are properly generated
+          echo "Building V8 base libraries..."
+          ninja -C $release v8_libbase
+          if ($LASTEXITCODE -ne 0) { 
+              echo "Failed to build v8_libbase"
+              exit 1 
+          }
+          
+          echo "Building V8 platform libraries..."
+          ninja -C $release v8_libplatform
+          if ($LASTEXITCODE -ne 0) { 
+              echo "Failed to build v8_libplatform"
+              exit 1 
+          }
+          
+          echo "Building V8 monolith..."
           ninja -C $release v8_monolith
+          if ($LASTEXITCODE -ne 0) { 
+              echo "Failed to build v8_monolith"
+              exit 1 
+          }
           
-          # Compile v8dasm using the source from project root
+          # Verify library files exist and are valid
+          $libFiles = @("$release\obj\v8_libbase.lib", "$release\obj\v8_libplatform.lib", "$release\obj\v8_monolith.lib")
+          foreach ($lib in $libFiles) {
+              if (-not (Test-Path $lib)) {
+                  echo "Error: Library file $lib not found"
+                  exit 1
+              }
+              $fileSize = (Get-Item $lib).Length
+              if ($fileSize -lt 1000) {
+                  echo "Error: Library file $lib appears to be too small ($fileSize bytes)"
+                  exit 1
+              }
+              echo "Library $lib verified: $fileSize bytes"
+          }
           
-          # Using appropriate linking options for Windows
-          clang++ ..\v8dasm.cpp -g -std=c++20 -Iinclude -L"$release\obj" -lv8_libbase -lv8_libplatform -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE
+          # Compile v8dasm using MSVC first (more reliable on Windows)
+          echo "Compiling v8dasm with MSVC..."
+          cl ..\v8dasm.cpp /std:c++20 /I"include" /Fe:v8dasm.exe /link "$release\obj\v8_monolith.lib" "$release\obj\v8_libbase.lib" "$release\obj\v8_libplatform.lib" /LIBPATH:"$release\obj" /MACHINE:X64
           
           # Check if compilation was successful
           if ($LASTEXITCODE -ne 0) {
-              echo "Failed to compile v8dasm with clang++, trying MSVC cl.exe"
-              # Try alternative compilation command with MSVC
-              cl ..\v8dasm.cpp /std:c++20 /I"include" /Fe:v8dasm.exe /link "$release\obj\v8_monolith.lib" "$release\obj\v8_libbase.lib" "$release\obj\v8_libplatform.lib" /LIBPATH:"$release\obj" /DV8_COMPRESS_POINTERS /DV8_ENABLE_SANDBOX /DV8_COMPRESS_POINTERS_IN_SHARED_CAGE /DV8_ENABLE_EXTERNAL_CODE_SPACE
+              echo "Failed to compile v8dasm with MSVC, trying clang++..."
+              # Try clang++ with proper Windows library paths
+              clang++ ..\v8dasm.cpp -std=c++20 -Iinclude -L"$release\obj" -lv8_monolith -lv8_libbase -lv8_libplatform -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE -ldbghelp -lwinmm -lsecur32
+              
               if ($LASTEXITCODE -ne 0) {
-                  echo "Failed to compile v8dasm with MSVC, trying alternative clang++ linking options"
-                  clang++ ..\v8dasm.cpp -g -std=c++20 -Iinclude -L"$release\obj" -lv8_libplatform -lv8_libbase -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE -ldbghelp -lwinmm
+                  echo "Failed to compile v8dasm with clang++, trying alternative linking..."
+                  # Last resort: try direct object linking
+                  clang++ ..\v8dasm.cpp -std=c++20 -Iinclude "$release\obj\v8_monolith.lib" "$release\obj\v8_libbase.lib" "$release\obj\v8_libplatform.lib" -o v8dasm.exe -ldbghelp -lwinmm -lsecur32
               }
+          }
+          
+          # Verify executable was created
+          if (-not (Test-Path "v8dasm.exe")) {
+              echo "Error: v8dasm.exe was not created"
+              exit 1
           }
           
           # Copy v8dasm.exe to output directory
           cp v8dasm.exe $release\
           
-          # Check if executable exists
+          # Check if executable exists in output directory
           if (Test-Path "$release\v8dasm.exe") {
               echo "V8 Disassembler compilation successful: $(Get-Item "$release\v8dasm.exe").Length bytes"
           } else {
-              echo "Error: V8 Disassembler compilation failed!"
+              echo "Error: Failed to copy v8dasm.exe to output directory!"
               exit 1
           }
 
