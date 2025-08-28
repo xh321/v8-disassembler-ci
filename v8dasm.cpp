@@ -27,7 +27,7 @@ static void loadBytecode(uint8_t* bytecodeBuffer, int length) {
       new ScriptCompiler::CachedData(bytecodeBuffer, length);
 
   // Create dummy source.
-  ScriptOrigin origin(isolate, String::NewFromUtf8Literal(isolate, "code.jsc"));
+  ScriptOrigin origin(String::NewFromUtf8Literal(isolate, "code.jsc"));
   ScriptCompiler::Source source(String::NewFromUtf8Literal(isolate, "\"ಠ_ಠ\""),
                                 origin, cached_data);
 

@@ -97,13 +97,17 @@ jobs:
           # Compile v8dasm using the source from project root
           
           # Using appropriate linking options for Windows
-          clang++ ..\v8dasm.cpp -g -std=c++17 -Iinclude -L"$release\obj" -lv8_libbase -lv8_libplatform -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE
+          clang++ ..\v8dasm.cpp -g -std=c++20 -Iinclude -L"$release\obj" -lv8_libbase -lv8_libplatform -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE
           
           # Check if compilation was successful
           if ($LASTEXITCODE -ne 0) {
-              echo "Failed to compile v8dasm, trying alternative linking options"
-              # Try alternative compilation command
-              clang++ ..\v8dasm.cpp -g -std=c++17 -Iinclude -L"$release\obj" -lv8_libplatform -lv8_libbase -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE -ldbghelp -lwinmm
+              echo "Failed to compile v8dasm with clang++, trying MSVC cl.exe"
+              # Try alternative compilation command with MSVC
+              cl ..\v8dasm.cpp /std:c++20 /I"include" /Fe:v8dasm.exe /link "$release\obj\v8_monolith.lib" "$release\obj\v8_libbase.lib" "$release\obj\v8_libplatform.lib" /LIBPATH:"$release\obj" /DV8_COMPRESS_POINTERS /DV8_ENABLE_SANDBOX /DV8_COMPRESS_POINTERS_IN_SHARED_CAGE /DV8_ENABLE_EXTERNAL_CODE_SPACE
+              if ($LASTEXITCODE -ne 0) {
+                  echo "Failed to compile v8dasm with MSVC, trying alternative clang++ linking options"
+                  clang++ ..\v8dasm.cpp -g -std=c++20 -Iinclude -L"$release\obj" -lv8_libplatform -lv8_libbase -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE -ldbghelp -lwinmm
+              }
           }
           
           # Copy v8dasm.exe to output directory
