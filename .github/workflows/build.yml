@@ -56,91 +56,14 @@ jobs:
           echo "Environment Variables:"
           Get-ChildItem env:
           
-      - name: Create V8 Disassembler File
+      - name: Verify V8 Disassembler Source
         # language=PowerShell
         run: |
-          Set-Content -Path "v8dasm.cpp" -Value @"
-#include <fstream>
-#include <iostream>
-#include <string>
-#include <vector>
-#include "libplatform/libplatform.h"
-#include "v8.h"
-#include "v8-initialization.h"
-
-#pragma comment(lib, "v8_libbase.lib")
-#pragma comment(lib, "v8_libplatform.lib")
-#pragma comment(lib, "wee8.lib")
-
-#pragma comment(lib, "secur32.lib")
-#pragma comment(lib, "winmm.lib")
-#pragma comment(lib, "dmoguids.lib")
-#pragma comment(lib, "wmcodecdspuuid.lib")
-#pragma comment(lib, "msdmo.lib")
-#pragma comment(lib, "Strmiids.lib")
-#pragma comment(lib, "DbgHelp.lib")
-
-using namespace v8;
-
-static Isolate* isolate = nullptr;
-
-static void loadBytecode(uint8_t* bytecodeBuffer, int length) {
-  // Load code into code cache.
-  ScriptCompiler::CachedData* cached_data =
-      new ScriptCompiler::CachedData(bytecodeBuffer, length);
-
-  // Create dummy source.
-  ScriptOrigin origin(isolate, String::NewFromUtf8Literal(isolate, "code.jsc"));
-  ScriptCompiler::Source source(String::NewFromUtf8Literal(isolate, "\"ಠ_ಠ\""),
-                                origin, cached_data);
-
-  // Compile code from code cache to print disassembly.
-  MaybeLocal<UnboundScript> script = ScriptCompiler::CompileUnboundScript(
-      isolate, &source, ScriptCompiler::kConsumeCodeCache);
-}
-
-static void readAllBytes(const std::string& file, std::vector<char>& buffer) {
-  std::ifstream infile(file, std::ios::binary);
-
-  infile.seekg(0, infile.end);
-  size_t length = infile.tellg();
-  infile.seekg(0, infile.beg);
-
-  if (length > 0) {
-    buffer.resize(length);
-    infile.read(&buffer[0], length);
-  }
-}
-
-int main(int argc, char* argv[]) {
-  V8::SetFlagsFromString("--no-lazy --no-flush-bytecode");
-
-  V8::InitializeICU();
-  std::unique_ptr<Platform> platform = platform::NewDefaultPlatform();
-  V8::InitializePlatform(platform.get());
-  V8::Initialize();
-
-#if defined(V8_ENABLE_SANDBOX)
-  if (!V8::IsSandboxConfiguredSecurely()) {
-    std::cerr << "Warning: V8 sandbox is not configured securely" << std::endl;
-  } else {
-    std::cout << "V8 sandbox is configured securely" << std::endl;
-  }
-#endif
-
-  Isolate::CreateParams create_params;
-  create_params.array_buffer_allocator =
-      ArrayBuffer::Allocator::NewDefaultAllocator();
-
-  isolate = Isolate::New(create_params);
-  Isolate::Scope isolate_scope(isolate);
-  HandleScope scope(isolate);
-
-  std::vector<char> data;
-  readAllBytes(argv[1], data);
-  loadBytecode((uint8_t*)data.data(), data.size());
-}
-"@
+          if (-not (Test-Path "v8dasm.cpp")) {
+            echo "Error: v8dasm.cpp not found in the project root directory!"
+            exit 1
+          }
+          echo "Found v8dasm.cpp in the project root directory"
 
       - name: Build V8 Disassembler
         id: build
@@ -171,17 +94,16 @@ int main(int argc, char* argv[]) {
           gn gen $release
           ninja -C $release v8_monolith
           
-          # Compile v8dasm
-          cp ..\v8dasm.cpp .
+          # Compile v8dasm using the source from project root
           
           # Using appropriate linking options for Windows
-          clang++ v8dasm.cpp -g -std=c++17 -Iinclude -L"$release\obj" -lv8_libbase -lv8_libplatform -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE
+          clang++ ..\v8dasm.cpp -g -std=c++17 -Iinclude -L"$release\obj" -lv8_libbase -lv8_libplatform -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE
           
           # Check if compilation was successful
           if ($LASTEXITCODE -ne 0) {
               echo "Failed to compile v8dasm, trying alternative linking options"
               # Try alternative compilation command
-              clang++ v8dasm.cpp -g -std=c++17 -Iinclude -L"$release\obj" -lv8_libplatform -lv8_libbase -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE -ldbghelp -lwinmm
+              clang++ ..\v8dasm.cpp -g -std=c++17 -Iinclude -L"$release\obj" -lv8_libplatform -lv8_libbase -lv8_monolith -o v8dasm.exe -DV8_COMPRESS_POINTERS -DV8_ENABLE_SANDBOX -DV8_COMPRESS_POINTERS_IN_SHARED_CAGE -DV8_ENABLE_EXTERNAL_CODE_SPACE -ldbghelp -lwinmm
           }
           
           # Copy v8dasm.exe to output directory
